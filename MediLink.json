@@ -1,0 +1,110 @@
+{
+  "name": "MediLink Optimized",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "902ba7bb-254e-47ad-b6ad-b591cd8080d1",
+        "responseMode": "streaming",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "id": "webhook-node",
+      "name": "Webhook",
+      "webhookId": "902ba7bb-254e-47ad-b6ad-b591cd8080d1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Contexto del proyecto:\nEres MediLink, un asistente de IA para gestionar citas médicas.\n\nBase de datos:\nPacientes(id, nombre, apellido, email, telefono, fecha_nacimiento)\nDoctores(id, nombre, apellido, especialidad, horario_disponible)\nCitas(id, pacienteId, doctorId, fecha_hora, estado)\n\nInstrucciones:\n- Validar datos del paciente antes de agendar.\n- Solicitar solo los campos faltantes.\n- Si doctor no disponible, ofrecer alternativas.\n- Mantener tono amable y profesional.\n- Responder en formato JSON:\n{\n  \"status\": \"success|error\",\n  \"message\": \"...\",\n  \"data\": {\n    \"paciente\": \"...\",\n    \"doctor\": \"...\",\n    \"especialidad\": \"...\",\n    \"fecha_hora\": \"...\",\n    \"alternativas\": []\n  }\n}\n\nMensaje actual: {{ $json.body.messaje }}\nUserId: {{ $json.body.useId || 'guest' }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [200, 0],
+      "id": "ai-agent",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [400, 0],
+      "id": "respond-webhook",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [200, 200],
+      "id": "google-gemini",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "IOpibrBupbzjn9OA",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.body.useId || $json.body.socketId || 'guest' }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [400, 200],
+      "id": "memory-node",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "schema": { "__rl": true, "value": "public", "mode": "name" },
+        "table": { "__rl": true, "value": "Citas", "mode": "name" },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "pacienteId": "={{ $json.data.pacienteId }}",
+            "doctorId": "={{ $json.data.doctorId }}",
+            "fecha_hora": "={{ $json.data.fecha_hora }}",
+            "estado": "={{ $json.data.estado || 'pendiente' }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [600, 200],
+      "id": "postgres-node",
+      "name": "Insert Cita Postgres",
+      "credentials": {
+        "postgres": {
+          "id": "5u0x57xD51i173Rq",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
+    "AI Agent": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] },
+    "Google Gemini Chat Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Simple Memory": { "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] },
+    "Insert Cita Postgres": { "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" }
+}
